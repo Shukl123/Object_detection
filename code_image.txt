@@ -1,0 +1,55 @@
+!pip install tensorflow tensorflow-hub opencv-python-headless
+import os
+import cv2
+import tensorflow as tf
+import tensorflow_hub as hub
+from google.colab.patches import cv2_imshow
+import numpy as np
+import imutils
+
+class DETECTION:
+    def __init__(self):
+        model_url = "https://tfhub.dev/tensorflow/faster_rcnn/inception_resnet_v2_640x640/1"
+        model_path = os.path.join("/content", "faster_rcnn_model")
+
+        if not os.path.exists(model_path):
+            print("Downloading the model...")
+            self.detector = hub.load(model_url)
+            tf.saved_model.save(self.detector, model_path)
+
+        self.detector = tf.saved_model.load(model_path)
+
+    def Detect_People(self, frame):
+        converted_img = tf.image.convert_image_dtype(frame, dtype=tf.uint8)[tf.newaxis, ...]
+        result = self.detector(converted_img)
+        result = {key: value.numpy() for key, value in result.items()}
+        return result
+
+    def process_image(self, image_path):
+        frame = cv2.imread(image_path)
+        frame = imutils.resize(frame, width=700)
+        print(f"Image size: {frame.shape}")
+
+        result = self.Detect_People(frame)
+        boxes = result['detection_boxes']
+        scores = result['detection_scores']
+        classes = result['detection_classes']
+
+        count_people = 0
+
+        for box, score, class_id in zip(boxes[0], scores[0], classes[0]):
+            ymin, xmin, ymax, xmax = box.tolist()
+            ymin, xmin, ymax, xmax = int(ymin * frame.shape[0]), int(xmin * frame.shape[1]), int(ymax * frame.shape[0]), int(xmax * frame.shape[1])
+
+            if score > 0.5 and int(class_id) == 1:  # Class 1 corresponds to 'person'
+                count_people += 1
+                color = (0, 255, 0)
+                cv2.rectangle(frame, (xmin, ymin), (xmax, ymax), color, 2)
+
+        print(f"Number of people detected: {count_people}")
+        cv2_imshow(frame)
+
+# Create an instance of the DETECTION class
+RUN = DETECTION()
+# Call the process_image method with the path to the image file
+RUN.process_image("/content/input_image.jpg")
